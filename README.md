@@ -14,3 +14,7 @@ Implement a weather station using the [TI Sensor Tag](http://www.ti.com/ww/en/wi
 * clone the repo and build it as it is
 * update the configuration and rebuild it
 * install and run it
+
+## TODOs
+
+* ???

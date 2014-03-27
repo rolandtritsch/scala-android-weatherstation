@@ -6,29 +6,22 @@
     android:versionName="1.0"
     >
   <uses-sdk android:minSdkVersion="18" android:targetSdkVersion="18" />
+  <uses-permission android:name="android.permission.BLUETOOTH" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+  <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
   <application
       android:label="@string/app_name"
       android:icon="@drawable/ic_launcher"
       android:theme="@android:style/Theme.Holo.Light"
       >
     <activity
-	android:name="FirstActivity"
+	android:name="MainActivity"
         android:label="@string/app_name"
 	>
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
-    </activity>
-    <activity
-        android:name="DisplayMessageActivity"
-        android:label="@string/title_activity_display_message"
-        android:parentActivityName="FirstActivity"
-	>
-      <meta-data
-          android:name="android.support.PARENT_ACTIVITY"
-          android:value="FirstActivity"
-	  />
     </activity>
   </application>
 </manifest>
