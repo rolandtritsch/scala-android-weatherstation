@@ -3,32 +3,38 @@ package org.tritsch.scala.android.weather
 import android.bluetooth.BluetoothGattCharacteristic
 import android.util.Log
 
-object SensorTagData {
+final object SensorTagData {
   val TAG = SensorTagData.getClass.getName
 
   def extractHumAmbientTemperature(c: BluetoothGattCharacteristic): Double = {
     require(c != null, "c cannot be null")
     Log.v(SensorTagData.TAG, "Enter - extractHumAmbientTemperature()")
-    val temp = -46.85 + ((175.72/65536) * shortSignedAtOffset(c, 0))
-    Log.d(SensorTagData.TAG, "Temperature >${temp}< ...")
+
+    val t = -46.85 + ((175.72/65536) * shortSignedAtOffset(c, 0))
+
+    Log.d(SensorTagData.TAG, s"Temperature >${t}< ...")
     Log.v(SensorTagData.TAG, "Leave - extractHumAmbientTemperature()")
-    temp
+    t
   }
 
   def extractHumidity(c: BluetoothGattCharacteristic): Double = {
+    require(c != null, "c cannot be null")
     Log.v(SensorTagData.TAG, "Enter - extractHumidity()")
-    var a = shortUnsignedAtOffset(c, 2)
+
+    val b = shortUnsignedAtOffset(c, 2)
     // bits [1..0] are status bits and need to be cleared
-    a = a - (a % 4)
-    val hume = ((-6f) + 125f * (a / 65535f))
-    Log.d(SensorTagData.TAG, s"Humidity >${hume}< ...")
+    val a = b - (b % 4)
+    val h = ((-6f) + 125f * (a / 65535f))
+
+    Log.d(SensorTagData.TAG, s"Humidity >${h}< ...")
     Log.v(SensorTagData.TAG, "Leave - extractHumidity()")
-    hume
+    h
   }
 
-  def extractCalibrationCoefficients(c: BluetoothGattCharacteristic): Array[Integer] = {
+  def extractCalibrationCoefficients(c: BluetoothGattCharacteristic): Array[Int] = {
+    require(c != null, "c cannot be null")
     Log.v(SensorTagData.TAG, "Enter - extractCalibrationCoefficients()")
-    var coefficients = new Array[Integer](8)
+    val coefficients = Array.fill(8)(0)
 
     coefficients(0) = shortUnsignedAtOffset(c, 0)
     coefficients(1) = shortUnsignedAtOffset(c, 2)
@@ -39,35 +45,42 @@ object SensorTagData {
     coefficients(6) = shortSignedAtOffset(c, 12)
     coefficients(7) = shortSignedAtOffset(c, 14)
 
+    val s = coefficients.mkString(",")
+    Log.d(SensorTagData.TAG, s"coefficients >${s}< ...")
     Log.v(SensorTagData.TAG, "Leave - extractCalibrationCoefficients()")
     coefficients
+  } ensuring(_.forall(_ != 0))
+
+  def extractBarTemperature(c: BluetoothGattCharacteristic, coef: Array[Int]): Double = {
+    require(c != null, "c cannot be null")
+    require(coef != null, "coef cannot be null")
+    require(coef.size == 8, "coef needs exactly 8 elemements")
+    require(coef.forall(_ != 0), "coef needs to be not 0")
+    Log.v(SensorTagData.TAG, "Enter - extractBarTemperature()")
+
+    val t = ((100 * (coef(0) * shortSignedAtOffset(c, 0) / Math.pow(2,8) + coef(1) * Math.pow(2,6))) / Math.pow(2,16)) / 100
+
+    Log.d(SensorTagData.TAG, s"BarTemperature >${t}< ...")
+    Log.v(SensorTagData.TAG, "Leave - extractBarTemperature()")
+    t
   }
 
-  def extractBarTemperature(characteristic: BluetoothGattCharacteristic, c: Array[Integer]): Double = {
-    Log.v(SensorTagData.TAG, "Enter - extractBarTemperature()")
-    val t_r = shortSignedAtOffset(characteristic, 0)
-    val t_a = (100 * (c(0) * t_r / Math.pow(2,8) + c(1) * Math.pow(2,6))) / Math.pow(2,16)
+  def extractBarometer(c: BluetoothGattCharacteristic, coef: Array[Int]): Double = {
+    val PASCAL_TO_INHG = 0.000296
 
-    val temp = t_a / 100
-    Log.d(SensorTagData.TAG, s"BarTemperature >${temp}< ...")
-    Log.v(SensorTagData.TAG, "Enter - extractBarTemperature()")
-    temp
-  }
-
-  def extractBarometer(characteristic: BluetoothGattCharacteristic, c: Array[Integer]): Double = {
-    // c holds the calibration coefficients
+    require(c != null, "c cannot be null")
+    require(coef != null, "coef cannot be null")
+    require(coef.size == 8, "coef needs exactly 8 elemements")
+    require(coef.forall(_ != 0), "coef needs to be not 0")
     Log.d(SensorTagData.TAG, "Enter - extractBarometer()")
 
-    val t_r = shortSignedAtOffset(characteristic, 0)
-    val p_r = shortUnsignedAtOffset(characteristic, 2)
+    val t_r = shortSignedAtOffset(c, 0)
+    val p_r = shortUnsignedAtOffset(c, 2)
 
-    val S = c(2) + c(3) * t_r / Math.pow(2,17) + ((c(4) * t_r / Math.pow(2,15)) * t_r) / Math.pow(2,19)
-    val O = c(5) * Math.pow(2,14) + c(6) * t_r / Math.pow(2,3) + ((c(7) * t_r / Math.pow(2,15)) * t_r) / Math.pow(2,4)
-    val p_a = (S * p_r + O) / Math.pow(2,14)
+    val S = coef(2) + coef(3) * t_r / Math.pow(2,17) + ((coef(4) * t_r / Math.pow(2,15)) * t_r) / Math.pow(2,19)
+    val O = coef(5) * Math.pow(2,14) + coef(6) * t_r / Math.pow(2,3) + ((coef(7) * t_r / Math.pow(2,15)) * t_r) / Math.pow(2,4)
+    val p_hg = ((S * p_r + O) / Math.pow(2,14)) * PASCAL_TO_INHG
 
-    // Convert pascal to in. Hg
-    // @todo - use a constant here
-    val p_hg = p_a * 0.000296
     Log.d(SensorTagData.TAG, s"BarPressure >${p_hg}< ...")
     Log.v(SensorTagData.TAG, "Leave - extractBarometer()")
     p_hg
@@ -80,8 +93,8 @@ object SensorTagData {
     * because the bytes are stored in the "wrong" direction.
     *
     * This function extracts these 16 bit two's complement values.
-    * */
-  private def shortSignedAtOffset(c: BluetoothGattCharacteristic, offset: Integer): Integer =  {
+    */
+  private def shortSignedAtOffset(c: BluetoothGattCharacteristic, offset: Int): Int =  {
     val lowerByte = c.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset)
     val upperByte = c.getIntValue(BluetoothGattCharacteristic.FORMAT_SINT8, offset + 1) // Note: interpret MSB as signed.
 
@@ -90,7 +103,7 @@ object SensorTagData {
     s
   }
 
-  private def shortUnsignedAtOffset(c: BluetoothGattCharacteristic, offset: Integer): Integer = {
+  private def shortUnsignedAtOffset(c: BluetoothGattCharacteristic, offset: Int): Int = {
     val lowerByte = c.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset)
     val upperByte = c.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset + 1) // Note: interpret MSB as unsigned.
 
