@@ -11,10 +11,13 @@ Implement a weather station using the [TI Sensor Tag](http://www.ti.com/ww/en/wi
 
 ## Making it work
 
-* clone the repo and build it as it is
-* update the configuration and rebuild it
-* install and run it
+* clone the repo and build it as it is with `sbt compile`
+* connect your device with an USB cable
+    * the device must run android 4.3 (android-18)
+	* check with `adb devices` that you can see the device and that it is the first/only one in the list
+* install the app with `sbt install`
+* on the device, go to your apps folder and start the `WeatherStation` app
 
 ## TODOs
 
-* ???
+* Look/grep for `@todo`

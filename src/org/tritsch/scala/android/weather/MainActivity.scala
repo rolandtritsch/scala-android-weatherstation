@@ -19,10 +19,11 @@ import android.widget.{TextView, Toast}
 
 import java.util.UUID
 
+// @todo - fix the humidity problem
 // @todo - add documentation
 // @todo - split class into two. One activity. One callback
 // @todo - put all hard coded config data into seperate file (e.g. the DEVICE_NAME and all the UUIDs)
-// @todo - get rid of the vars. Make the code look like scala code
+// @todo - get rid of the vars. Make the code look like scala code. Rewrite/refactpr based on the Scala for Android book
 // @todo - refactor the code and start to build the beginnings of a common lib (e.g. a view to scan/list beacons)
 // @todo - pick a good license
 // @todo - add test cases
@@ -59,16 +60,13 @@ private object MainActivity {
 class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
   private var mBluetoothAdapter: BluetoothAdapter = null
   private val mDevices = new SparseArray[BluetoothDevice]
-
   private var mConnectedGatt: BluetoothGatt = null
-
   private var mTemperature, mHumidity, mPressure: TextView = null
-
   private var mProgress: ProgressDialog = null
 
   override def onCreate(savedInstanceState: Bundle): Unit =  {
     super.onCreate(savedInstanceState)
-    Log.d(MainActivity.TAG, "Enter - onCreate()")
+    Log.d(MainActivity.TAG, "Enter - onCreate")
 
     requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS)
     setContentView(R.layout.activity_main)
@@ -79,143 +77,141 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
     mPressure = findViewById(R.id.text_pressure).asInstanceOf[TextView]
 
     val manager = getSystemService(Context.BLUETOOTH_SERVICE).asInstanceOf[BluetoothManager]
-    mBluetoothAdapter = manager.getAdapter()
+    mBluetoothAdapter = manager.getAdapter
 
     mProgress = new ProgressDialog(this)
     mProgress.setIndeterminate(true)
     mProgress.setCancelable(false)
-    Log.d(MainActivity.TAG, "Leave - onCreate()")
+    Log.d(MainActivity.TAG, "Leave - onCreate")
   }
 
-  override def onResume(): Unit = {
-    super.onResume()
-    Log.d(MainActivity.TAG, "Enter - onResume()")
-    if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
+  override def onResume: Unit = {
+    super.onResume
+    Log.d(MainActivity.TAG, "Enter - onResume")
+    if(mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled) {
       Log.i(MainActivity.TAG, "Bluetooth not enabled ...")
-      val enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-      startActivity(enableBtIntent)
-      finish()
+      startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+      finish
     } else {
-      if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+      if(!getPackageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
         Log.i(MainActivity.TAG, "Bluetooth not available ...")
-        Toast.makeText(this, "No LE Support.", Toast.LENGTH_SHORT).show()
-        finish()
+        Toast.makeText(this, "No BLE Support!!!", Toast.LENGTH_SHORT).show
+        finish
       } else {
-        clearDisplayValues()
+        clearDisplayValues
       }
     }
-    Log.d(MainActivity.TAG, "Leave - onResume()")
+    Log.d(MainActivity.TAG, "Leave - onResume")
   }
 
-  override def onPause(): Unit = {
-    super.onPause()
-    Log.d(MainActivity.TAG, "Enter - onPause()")
-    mProgress.dismiss()
+  override def onPause: Unit = {
+    super.onPause
+    Log.d(MainActivity.TAG, "Enter - onPause")
+    mProgress.dismiss
 
     Log.i(MainActivity.TAG, "Cancel any scans in progress ...")
     mHandler.removeCallbacks(mStopRunnable)
-    mHandler.removeCallbacks(mStartRunnable)
+    // mHandler.removeCallbacks(mStartRunnable)
     mBluetoothAdapter.stopLeScan(this)
-    Log.d(MainActivity.TAG, "Leave - onPause()")
+    Log.d(MainActivity.TAG, "Leave - onPause")
   }
 
-  override def onStop(): Unit = {
-    super.onStop()
-    Log.d(MainActivity.TAG, "Enter - onStop()")
+  override def onStop: Unit = {
+    super.onStop
+    Log.d(MainActivity.TAG, "Enter - onStop")
 
     Log.i(MainActivity.TAG, "Disconnect from any active tag connection ...")
-    if (mConnectedGatt != null) {
-      mConnectedGatt.disconnect()
+    if(mConnectedGatt != null) {
+      mConnectedGatt.disconnect
       mConnectedGatt = null
     }
-    Log.d(MainActivity.TAG, "Leave - onStop()")
+    Log.d(MainActivity.TAG, "Leave - onStop")
   }
 
   override def onCreateOptionsMenu(menu: Menu): Boolean = {
-    Log.d(MainActivity.TAG, "Enter - onCreateOptionsMenu()")
+    Log.d(MainActivity.TAG, "Enter - onCreateOptionsMenu")
 
     Log.i(MainActivity.TAG, "Add the *scan* option to the menu ...")
-    getMenuInflater().inflate(R.menu.main, menu)
+    getMenuInflater.inflate(R.menu.main, menu)
 
-    Log.i(MainActivity.TAG, "Add any device elements we have discovered to the overflow menu ...")
+    Log.i(MainActivity.TAG, s"Add ${mDevices.size} devices to the overflow menu ...")
     for (i <- 0 until mDevices.size) {
-      menu.add(0, mDevices.keyAt(i), 0, mDevices.valueAt(i).getName())
+      menu.add(0, mDevices.keyAt(i), 0, mDevices.valueAt(i).getName)
     }
-    Log.d(MainActivity.TAG, "Leave - onCreateOptionsMenu()")
+    Log.d(MainActivity.TAG, "Leave - onCreateOptionsMenu")
     true
   }
 
   override def onOptionsItemSelected(item: MenuItem): Boolean = {
-    Log.d(MainActivity.TAG, "Enter - onOptionsItemSelected()")
+    Log.d(MainActivity.TAG, "Enter - onOptionsItemSelected")
 
-    val didIt = item.getItemId() match {
+    val didIt = item.getItemId match {
       case R.id.action_scan => {
-        mDevices.clear()
-        startScan()
+        Log.i(MainActivity.TAG, "Start scan ...")
+        mDevices.clear
+        startScan
         true
       }
       case _ => {
-        Log.i(MainActivity.TAG, "Obtain the discovered device to connect with ...")
-        val device = mDevices.get(item.getItemId())
+        val device = mDevices.get(item.getItemId)
 
-        Log.i(MainActivity.TAG, s"Connecting to ${device.getName()} ...")
+        Log.i(MainActivity.TAG, s"Connecting to ${device.getName} ...")
         mConnectedGatt = device.connectGatt(this, false, mGattCallback)
 
-        Log.i(MainActivity.TAG, "Display progress bar ...")
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, s"Connecting to ${device.getName()} ..."))
+        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, s"Connecting to ${device.getName} ..."))
         super.onOptionsItemSelected(item)
       }
     }
-    Log.d(MainActivity.TAG, "Leave - onOptionsItemSelected()")
+    Log.d(MainActivity.TAG, "Leave - onOptionsItemSelected")
     didIt
   }
 
-  private def clearDisplayValues(): Unit = {
-    Log.d(MainActivity.TAG, "Enter - clearDisplayValues()")
+  private def clearDisplayValues: Unit = {
+    Log.d(MainActivity.TAG, "Enter - clearDisplayValues")
     mTemperature.setText("---")
     mHumidity.setText("---")
     mPressure.setText("---")
-    Log.d(MainActivity.TAG, "Leave - clearDisplayValues()")
+    Log.d(MainActivity.TAG, "Leave - clearDisplayValues")
   }
 
-
-  private def mStopRunnable: Runnable = new Runnable() {
-    override def run(): Unit = {
-      stopScan()
+  private val mStopRunnable: Runnable = new Runnable {
+    override def run: Unit = {
+      stopScan
     }
   }
-
-  private def mStartRunnable: Runnable = new Runnable() {
-    override def run(): Unit = {
-      startScan()
+/*
+  private val mStartRunnable: Runnable = new Runnable {
+    override def run: Unit = {
+      startScan
     }
   }
-
-  private def startScan(): Unit = {
-    Log.d(MainActivity.TAG, "Enter - startScan()")
+*/
+  private def startScan: Unit = {
+    Log.d(MainActivity.TAG, "Enter - startScan")
     mBluetoothAdapter.startLeScan(this)
     setProgressBarIndeterminateVisibility(true)
     // @todo - put this conf var into a conf file
     mHandler.postDelayed(mStopRunnable, 2500)
-    Log.d(MainActivity.TAG, "Leave - startScan()")
+    Log.d(MainActivity.TAG, "Leave - startScan")
   }
 
-  private def stopScan(): Unit =  {
+  private def stopScan: Unit =  {
+    Log.d(MainActivity.TAG, "Enter - stopScan")
     mBluetoothAdapter.stopLeScan(this)
     setProgressBarIndeterminateVisibility(false)
-    Log.d(MainActivity.TAG, "Leave - stopScan()")
+    Log.d(MainActivity.TAG, "Leave - stopScan")
   }
 
   // @todo - Move the implementation of BluetoothAdapter.LeScanCallback to a seperate file
   override def onLeScan(device: BluetoothDevice, rssi: Int, scanRecord: Array[Byte]): Unit = {
-    Log.d(MainActivity.TAG, "Enter - onLeScan()")
-    Log.i(MainActivity.TAG, "Found new LE device ${device.getName()}@${rssi} ...")
-    if (MainActivity.DEVICE_NAME.equals(device.getName())) {
+    Log.d(MainActivity.TAG, "Enter - onLeScan")
+    Log.i(MainActivity.TAG, s"Found new LE device ${device.getName} @ ${rssi} ...")
+    if(MainActivity.DEVICE_NAME.equals(device.getName)) {
       Log.d(MainActivity.TAG, "Found new SensorTag ...")
-      mDevices.put(device.hashCode(), device)
-      invalidateOptionsMenu()
+      mDevices.put(device.hashCode, device)
+      invalidateOptionsMenu
     }
-    Log.d(MainActivity.TAG, "Leave - onLeScan()")
+    Log.d(MainActivity.TAG, "Leave - onLeScan")
   }
 
   /*
@@ -223,12 +219,12 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
    * one characteristic be read or written at a time until all of our sensors
    * are enabled and we are registered to get notifications.
    */
-  private def mGattCallback: BluetoothGattCallback = new BluetoothGattCallback() {
+  private val  mGattCallback: BluetoothGattCallback = new BluetoothGattCallback {
     private var mState = 0
 
-    private def reset(): Unit = { mState = 0 }
+    private def reset: Unit = { mState = 0 }
 
-    private def advance(): Unit = { mState = mState + 1 }
+    private def advance: Unit = { mState = mState + 1 }
 
     /*
      * Send an enable command to each sensor by writing a configuration
@@ -236,7 +232,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
      * low by disabling sensors you aren't using.
      */
     private def enableNextSensor(gatt: BluetoothGatt): Unit = {
-      Log.d(MainActivity.TAG, "Enter - enableNextSensor()")
+      Log.d(MainActivity.TAG, "Enter - enableNextSensor")
       var characteristic: BluetoothGattCharacteristic = null
       mState match {
         case 0 => {
@@ -255,22 +251,20 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
           characteristic.setValue(Array.fill[Byte](1)(0x01))
         }
         case _ => {
+          Log.i(MainActivity.TAG, "All sensors enabled ...")
           mHandler.sendEmptyMessage(MainActivity.MSG_DISMISS)
-          Log.i(MainActivity.TAG, "All Sensors Enabled")
-          // @todo - do not know how to handle this
-          assert(false)
         }
       }
 
-      gatt.writeCharacteristic(characteristic)
-      Log.d(MainActivity.TAG, "Leave - enableNextSensor()")
+      if(characteristic != null) gatt.writeCharacteristic(characteristic)
+      Log.d(MainActivity.TAG, "Leave - enableNextSensor")
     }
 
     /*
      * Read the data characteristic's value for each sensor explicitly
      */
     private def readNextSensor(gatt: BluetoothGatt): Unit = {
-      Log.d(MainActivity.TAG, "Enter - readNextSensor()")
+      Log.d(MainActivity.TAG, "Enter - readNextSensor")
       var characteristic: BluetoothGattCharacteristic = null
       mState match {
         case 0 => {
@@ -286,14 +280,13 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
           characteristic = gatt.getService(MainActivity.HUMIDITY_SERVICE).getCharacteristic(MainActivity.HUMIDITY_DATA_CHAR)
         }
         case _ => {
+          Log.i(MainActivity.TAG, "All sensors read ...")
           mHandler.sendEmptyMessage(MainActivity.MSG_DISMISS)
-          Log.i(MainActivity.TAG, "All Sensors Enabled")
-          assert(false)
         }
       }
 
-      gatt.readCharacteristic(characteristic)
-      Log.d(MainActivity.TAG, "Leave - readNextSensor()")
+      if(characteristic != null) gatt.readCharacteristic(characteristic)
+      Log.d(MainActivity.TAG, "Leave - readNextSensor")
     }
 
     /*
@@ -302,7 +295,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
      * configuration descriptor.
      */
     private def setNotifyNextSensor(gatt: BluetoothGatt): Unit = {
-      Log.d(MainActivity.TAG, "Enter - setNotifyNextSensor()")
+      Log.d(MainActivity.TAG, "Enter - setNotifyNextSensor")
       var characteristic: BluetoothGattCharacteristic = null
       mState match {
         case 0 => {
@@ -318,119 +311,119 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
           characteristic = gatt.getService(MainActivity.HUMIDITY_SERVICE).getCharacteristic(MainActivity.HUMIDITY_DATA_CHAR)
         }
         case _ => {
+          Log.i(MainActivity.TAG, "All sensor notifications set ...")
           mHandler.sendEmptyMessage(MainActivity.MSG_DISMISS)
-          Log.i(MainActivity.TAG, "All Sensors Enabled")
-          assert(false)
         }
       }
-      Log.i(MainActivity.TAG, "Enable local notifications ...")
-      gatt.setCharacteristicNotification(characteristic, true)
 
-      Log.i(MainActivity.TAG, "Enabled remote notifications ...")
-      val desc = characteristic.getDescriptor(MainActivity.CONFIG_DESCRIPTOR)
-      desc.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-      gatt.writeDescriptor(desc)
-      Log.d(MainActivity.TAG, "Leave - setNotifyNextSensor()")
+      if(characteristic != null) {
+        Log.i(MainActivity.TAG, "Enable local notifications ...")
+        gatt.setCharacteristicNotification(characteristic, true)
+
+        Log.i(MainActivity.TAG, "Enabled remote notifications ...")
+        val desc = characteristic.getDescriptor(MainActivity.CONFIG_DESCRIPTOR)
+        desc.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        gatt.writeDescriptor(desc)
+      }
+      Log.d(MainActivity.TAG, "Leave - setNotifyNextSensor")
     }
 
     override def onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int): Unit = {
-      Log.d(MainActivity.TAG, "Enter - OnConnectionStateChange()")
-      Log.i(MainActivity.TAG, "Connection state change from >${status}< to ${connectionState(newState)}")
-      if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
-        /*
-         * Once successfully connected, we must next discover all the services on the
-         * device before we can read and write their characteristics.
-         */
-        gatt.discoverServices()
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, "Discovering Services..."))
-      } else if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
-        /*
-         * If at any point we disconnect, send a message to clear the weather values
-         * out of the UI
-         */
+      Log.d(MainActivity.TAG, "Enter - OnConnectionStateChange")
+      Log.i(MainActivity.TAG, s"Connection state change from >${connectionState(status)}< to >${connectionState(newState)}<")
+      if(status == newState) {
+        Log.w(MainActivity.TAG, "Error: Non-state change event dedected ... ignoring the event ...")
+      } else if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
+        Log.i(MainActivity.TAG, "Discovering services ...")
+        gatt.discoverServices
+        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, "Discovering Services ..."))
+      } else if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
+        Log.i(MainActivity.TAG, "Just disconnected ...")
         mHandler.sendEmptyMessage(MainActivity.MSG_CLEAR)
-      } else if (status != BluetoothGatt.GATT_SUCCESS) {
-        /*
-         * If there is a failure at any stage, simply disconnect
-         */
-        gatt.disconnect()
+      } else if(status != BluetoothGatt.GATT_SUCCESS) {
+        Log.w(MainActivity.TAG, "Error: Bad state detected ... disconnecting ...")
+        gatt.disconnect
+      } else {
+        Log.w(MainActivity.TAG, "Error: *Really* bad state detected ... disconnecting ...")
+        gatt.disconnect
       }
-      Log.d(MainActivity.TAG, "Leave - OnConnectionStateChange()")
+      Log.d(MainActivity.TAG, "Leave - OnConnectionStateChange")
     }
 
     override def onServicesDiscovered(gatt: BluetoothGatt, status: Int): Unit = {
-      Log.d(MainActivity.TAG, "Enter - onServicesDiscovered()")
-      Log.i(MainActivity.TAG, "Services discovered >${status}< ...")
-      mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, "Enabling Sensors..."))
+      Log.d(MainActivity.TAG, "Enter - onServicesDiscovered")
+      Log.i(MainActivity.TAG, s"Services discovered >${status}< ...")
+      mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, "Enabling Sensors ..."))
       /*
        * With services discovered, we are going to reset our state machine and start
        * working through the sensors we need to enable
        */
-      reset()
+      reset
       enableNextSensor(gatt)
-      Log.d(MainActivity.TAG, "Leave - onServicesDiscovered()")
+      Log.d(MainActivity.TAG, "Leave - onServicesDiscovered")
     }
 
     override def onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int): Unit = {
-      Log.d(MainActivity.TAG, "Enter - onCharacteristicRead()")
-      Log.i(MainActivity.TAG, "For each read, pass the data up to the UI thread to update the display ...")
-      if(MainActivity.HUMIDITY_DATA_CHAR.equals(characteristic.getUuid())) {
+      Log.d(MainActivity.TAG, "Enter - onCharacteristicRead")
+      Log.i(MainActivity.TAG, s"Reading characteristic >${characteristic.getUuid}< ...")
+      // For each read, pass the data up to the UI thread to update the display ...
+      if(MainActivity.HUMIDITY_DATA_CHAR.equals(characteristic.getUuid)) {
         mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_HUMIDITY, characteristic))
-      }
-      if(MainActivity.PRESSURE_DATA_CHAR.equals(characteristic.getUuid())) {
+      } else if(MainActivity.PRESSURE_DATA_CHAR.equals(characteristic.getUuid)) {
         mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE, characteristic))
-      }
-      if(MainActivity.PRESSURE_CAL_CHAR.equals(characteristic.getUuid())) {
+      } else if(MainActivity.PRESSURE_CAL_CHAR.equals(characteristic.getUuid)) {
         mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE_CAL, characteristic))
+      } else {
+        Log.w(MainActivity.TAG, s"Error: Unknown characteristic detected >${characteristic.getUuid}< ...")
       }
 
-      Log.i(MainActivity.TAG, "After reading the initial value, next we enable notifications ...")
+      // After reading the initial value, next we enable notifications ...
       setNotifyNextSensor(gatt)
-      Log.d(MainActivity.TAG, "Leave - onCharacteristicRead()")
+      Log.d(MainActivity.TAG, "Leave - onCharacteristicRead")
     }
 
     override def onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int): Unit = {
-      Log.d(MainActivity.TAG, "Enter - onCharacteristicRead()")
-      Log.i(MainActivity.TAG, "After writing the enable flag, next we read the initial value ...")
+      Log.d(MainActivity.TAG, "Enter - onCharacteristicRead")
+      // After writing the enable flag, next we read the initial value ...
       readNextSensor(gatt)
-      Log.d(MainActivity.TAG, "Enter - onCharacteristicRead()")
+      Log.d(MainActivity.TAG, "Enter - onCharacteristicRead")
     }
 
     override def onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic): Unit = {
-      Log.d(MainActivity.TAG, "Enter - onCharacteristicChanged()")
+      Log.d(MainActivity.TAG, "Enter - onCharacteristicChanged")
       /*
        * After notifications are enabled, all updates from the device on characteristic
        * value changes will be posted here.  Similar to read, we hand these up to the
        * UI thread to update the display.
        */
-      if(MainActivity.HUMIDITY_DATA_CHAR.equals(characteristic.getUuid())) {
+      if(MainActivity.HUMIDITY_DATA_CHAR.equals(characteristic.getUuid)) {
         mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_HUMIDITY, characteristic))
       }
-      if(MainActivity.PRESSURE_DATA_CHAR.equals(characteristic.getUuid())) {
+      if(MainActivity.PRESSURE_DATA_CHAR.equals(characteristic.getUuid)) {
         mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE, characteristic))
       }
-      if(MainActivity.PRESSURE_CAL_CHAR.equals(characteristic.getUuid())) {
+      if(MainActivity.PRESSURE_CAL_CHAR.equals(characteristic.getUuid)) {
         mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE_CAL, characteristic))
       }
-      Log.d(MainActivity.TAG, "Leave - onCharacteristicChanged()")
+      Log.d(MainActivity.TAG, "Leave - onCharacteristicChanged")
     }
 
     override def onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int): Unit = {
-      Log.d(MainActivity.TAG, "Enter - onDescriptorWrite()")
-      Log.i(MainActivity.TAG, "Once notifications are enabled, we move to the next sensor and start over with enable ...")
-      advance()
+      Log.d(MainActivity.TAG, "Enter - onDescriptorWrite")
+      // Once notifications are enabled, we move to the next sensor and start over with enable ...
+      advance
       enableNextSensor(gatt)
-      Log.d(MainActivity.TAG, "Leave - onDescriptorWrite()")
+      Log.d(MainActivity.TAG, "Leave - onDescriptorWrite")
     }
 
     override def onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int): Unit = {
-      Log.d(MainActivity.TAG, "Enter - onReadRemoteRssi()")
-      Log.i(MainActivity.TAG, "Remote RSSI >${rssi}< ...")
-      Log.d(MainActivity.TAG, "Leave - onReadRemoteRssi()")
+      Log.d(MainActivity.TAG, "Enter - onReadRemoteRssi")
+      Log.i(MainActivity.TAG, s"Remote RSSI >${rssi}< ...")
+      Log.d(MainActivity.TAG, "Leave - onReadRemoteRssi")
     }
 
     private def connectionState(status: Int): String = {
-      Log.d(MainActivity.TAG, "Enter - connectionState()")
+      Log.v(MainActivity.TAG, "Enter - connectionState")
       val s = status match {
         case BluetoothProfile.STATE_CONNECTED => "Connected"
         case BluetoothProfile.STATE_DISCONNECTED => "Disconnected"
@@ -438,7 +431,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
         case BluetoothProfile.STATE_DISCONNECTING => "Disconnecting"
         case _ => String.valueOf(status)
       }
-      Log.d(MainActivity.TAG, "Leave - connectionState()")
+      Log.v(MainActivity.TAG, "Leave - connectionState")
       s
     }
   }
@@ -446,13 +439,13 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
   /*
    * We have a Handler to process event results on the main thread
    */
-  private def mHandler: Handler = new Handler() {
+  private val mHandler: Handler = new Handler {
     override def handleMessage(msg: Message): Unit = {
-      Log.d(MainActivity.TAG, "Enter - handleMessage()")
+      Log.d(MainActivity.TAG, "Enter - handleMessage")
       msg.what match {
         case MainActivity.MSG_HUMIDITY => {
           val characteristic = msg.obj.asInstanceOf[BluetoothGattCharacteristic]
-          if (characteristic.getValue() == null) {
+          if(characteristic.getValue == null) {
             Log.w(MainActivity.TAG, "Error obtaining humidity value!!!")
           } else {
             updateHumidityValues(characteristic)
@@ -460,7 +453,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
         }
         case MainActivity.MSG_PRESSURE => {
           val characteristic = msg.obj.asInstanceOf[BluetoothGattCharacteristic]
-          if (characteristic.getValue() == null) {
+          if(characteristic.getValue == null) {
             Log.w(MainActivity.TAG, "Error obtaining pressure value!!!")
           } else {
             updatePressureValue(characteristic)
@@ -468,49 +461,49 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
         }
         case MainActivity.MSG_PRESSURE_CAL => {
           val characteristic = msg.obj.asInstanceOf[BluetoothGattCharacteristic]
-          if (characteristic.getValue() == null) {
-            Log.w(MainActivity.TAG, "Error obtaining cal value")
+          if(characteristic.getValue == null) {
+            Log.w(MainActivity.TAG, "Error obtaining cal value!!!")
           } else {
             updatePressureCals(characteristic)
           }
         }
         case MainActivity.MSG_PROGRESS => {
           mProgress.setMessage(msg.obj.asInstanceOf[String])
-          if (!mProgress.isShowing()) {
-            mProgress.show()
+          if(!mProgress.isShowing) {
+            mProgress.show
           }
         }
-        case MainActivity.MSG_DISMISS => mProgress.hide()
-        case MainActivity.MSG_CLEAR => clearDisplayValues()
+        case MainActivity.MSG_DISMISS => mProgress.hide
+        case MainActivity.MSG_CLEAR => clearDisplayValues
       }
-      Log.d(MainActivity.TAG, "Leave - handleMessage()")
+      Log.d(MainActivity.TAG, "Leave - handleMessage")
     }
   }
 
   // Methods to extract sensor data and update the UI
   private def updateHumidityValues(characteristic: BluetoothGattCharacteristic): Unit = {
-    Log.d(MainActivity.TAG, "Enter - updateHumidityValues()")
+    Log.d(MainActivity.TAG, "Enter - updateHumidityValues")
     val humidity = SensorTagData.extractHumidity(characteristic)
     mHumidity.setText(f"${humidity}%.0f")
-    Log.d(MainActivity.TAG, "Leave - updateHumidityValues()")
+    Log.d(MainActivity.TAG, "Leave - updateHumidityValues")
   }
 
-  private var mPressureCals: Array[Integer] = null
+  private var mPressureCals: Array[Int] = null
   private def updatePressureCals(characteristic: BluetoothGattCharacteristic): Unit = {
-    Log.d(MainActivity.TAG, "Enter - updatePressureCals()")
+    Log.d(MainActivity.TAG, "Enter - updatePressureCals")
     mPressureCals = SensorTagData.extractCalibrationCoefficients(characteristic)
-    Log.d(MainActivity.TAG, "Leave - updatePressureCals()")
+    Log.d(MainActivity.TAG, "Leave - updatePressureCals")
   }
 
   private def updatePressureValue(characteristic: BluetoothGattCharacteristic): Unit = {
-    Log.d(MainActivity.TAG, "Enter - updatePressureValue()")
-    if (mPressureCals != null) {
+    Log.d(MainActivity.TAG, "Enter - updatePressureValue")
+    if(mPressureCals != null) {
       val pressure = SensorTagData.extractBarometer(characteristic, mPressureCals)
-      val temp = SensorTagData.extractBarTemperature(characteristic, mPressureCals)
+      val temperature = SensorTagData.extractBarTemperature(characteristic, mPressureCals)
 
-      mTemperature.setText(f"${temp}%.1f")
+      mTemperature.setText(f"${temperature}%.1f")
       mPressure.setText(f"${pressure}%.2f")
     }
-    Log.d(MainActivity.TAG, "Leave - updatePressureValue()")
+    Log.d(MainActivity.TAG, "Leave - updatePressureValue")
   }
 }
