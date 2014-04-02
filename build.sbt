@@ -11,10 +11,10 @@ name := "ti_sensortag-weatherstation"
 scalaVersion := "2.10.3"
 
 // scala 2.10 flag for feature warnings
-scalacOptions in Compile += "-feature"
+scalacOptions in Compile ++= Seq("-feature", "-language:implicitConversions")
 
 // for non-ant-based projects, you'll need this for the specific build target
-platformTarget in Android := "android-18"
+platformTarget in Android := "android-19"
 
 // use this if you have problems with "classNotFound" exceptions at runtime
 proguardOptions in Android := Seq("-dontobfuscate", "-dontoptimize")

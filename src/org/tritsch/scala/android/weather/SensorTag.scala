@@ -3,37 +3,53 @@ package org.tritsch.scala.android.weather
 import android.bluetooth.BluetoothGattCharacteristic
 import android.util.Log
 
-final object SensorTagData {
-  val TAG = SensorTagData.getClass.getName
+import java.util.UUID
+
+final object SensorTag {
+  val TAG = SensorTag.getClass.getName
+
+  // Humidity Service
+  val HUMIDITY_SERVICE = UUID.fromString("f000aa20-0451-4000-b000-000000000000")
+  val HUMIDITY_DATA_CHAR = UUID.fromString("f000aa21-0451-4000-b000-000000000000")
+  val HUMIDITY_CONFIG_CHAR = UUID.fromString("f000aa22-0451-4000-b000-000000000000")
+
+  // Barometric Pressure Service
+  val PRESSURE_SERVICE = UUID.fromString("f000aa40-0451-4000-b000-000000000000")
+  val PRESSURE_DATA_CHAR = UUID.fromString("f000aa41-0451-4000-b000-000000000000")
+  val PRESSURE_CONFIG_CHAR = UUID.fromString("f000aa42-0451-4000-b000-000000000000")
+  val PRESSURE_CAL_CHAR = UUID.fromString("f000aa43-0451-4000-b000-000000000000")
+
+  // Client Configuration Descriptor
+  val CONFIG_DESCRIPTOR = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
   def extractHumAmbientTemperature(c: BluetoothGattCharacteristic): Double = {
     require(c != null, "c cannot be null")
-    Log.v(SensorTagData.TAG, "Enter - extractHumAmbientTemperature()")
+    Log.v(SensorTag.TAG, "Enter - extractHumAmbientTemperature()")
 
     val t = -46.85 + ((175.72/65536) * shortSignedAtOffset(c, 0))
 
-    Log.d(SensorTagData.TAG, s"Temperature >${t}< ...")
-    Log.v(SensorTagData.TAG, "Leave - extractHumAmbientTemperature()")
+    Log.d(SensorTag.TAG, s"Temperature >${t}< ...")
+    Log.v(SensorTag.TAG, "Leave - extractHumAmbientTemperature()")
     t
   }
 
   def extractHumidity(c: BluetoothGattCharacteristic): Double = {
     require(c != null, "c cannot be null")
-    Log.v(SensorTagData.TAG, "Enter - extractHumidity()")
+    Log.v(SensorTag.TAG, "Enter - extractHumidity()")
 
     val b = shortUnsignedAtOffset(c, 2)
     // bits [1..0] are status bits and need to be cleared
     val a = b - (b % 4)
     val h = ((-6f) + 125f * (a / 65535f))
 
-    Log.d(SensorTagData.TAG, s"Humidity >${h}< ...")
-    Log.v(SensorTagData.TAG, "Leave - extractHumidity()")
+    Log.d(SensorTag.TAG, s"Humidity >${h}< ...")
+    Log.v(SensorTag.TAG, "Leave - extractHumidity()")
     h
   }
 
   def extractCalibrationCoefficients(c: BluetoothGattCharacteristic): Array[Int] = {
     require(c != null, "c cannot be null")
-    Log.v(SensorTagData.TAG, "Enter - extractCalibrationCoefficients()")
+    Log.v(SensorTag.TAG, "Enter - extractCalibrationCoefficients()")
     val coefficients = Array.fill(8)(0)
 
     coefficients(0) = shortUnsignedAtOffset(c, 0)
@@ -46,8 +62,8 @@ final object SensorTagData {
     coefficients(7) = shortSignedAtOffset(c, 14)
 
     val s = coefficients.mkString(",")
-    Log.d(SensorTagData.TAG, s"coefficients >${s}< ...")
-    Log.v(SensorTagData.TAG, "Leave - extractCalibrationCoefficients()")
+    Log.d(SensorTag.TAG, s"coefficients >${s}< ...")
+    Log.v(SensorTag.TAG, "Leave - extractCalibrationCoefficients()")
     coefficients
   } ensuring(_.forall(_ != 0))
 
@@ -56,12 +72,12 @@ final object SensorTagData {
     require(coef != null, "coef cannot be null")
     require(coef.size == 8, "coef needs exactly 8 elemements")
     require(coef.forall(_ != 0), "coef needs to be not 0")
-    Log.v(SensorTagData.TAG, "Enter - extractBarTemperature()")
+    Log.v(SensorTag.TAG, "Enter - extractBarTemperature()")
 
     val t = ((100 * (coef(0) * shortSignedAtOffset(c, 0) / Math.pow(2,8) + coef(1) * Math.pow(2,6))) / Math.pow(2,16)) / 100
 
-    Log.d(SensorTagData.TAG, s"BarTemperature >${t}< ...")
-    Log.v(SensorTagData.TAG, "Leave - extractBarTemperature()")
+    Log.d(SensorTag.TAG, s"BarTemperature >${t}< ...")
+    Log.v(SensorTag.TAG, "Leave - extractBarTemperature()")
     t
   }
 
@@ -72,7 +88,7 @@ final object SensorTagData {
     require(coef != null, "coef cannot be null")
     require(coef.size == 8, "coef needs exactly 8 elemements")
     require(coef.forall(_ != 0), "coef needs to be not 0")
-    Log.d(SensorTagData.TAG, "Enter - extractBarometer()")
+    Log.d(SensorTag.TAG, "Enter - extractBarometer()")
 
     val t_r = shortSignedAtOffset(c, 0)
     val p_r = shortUnsignedAtOffset(c, 2)
@@ -81,8 +97,8 @@ final object SensorTagData {
     val O = coef(5) * Math.pow(2,14) + coef(6) * t_r / Math.pow(2,3) + ((coef(7) * t_r / Math.pow(2,15)) * t_r) / Math.pow(2,4)
     val p_hg = ((S * p_r + O) / Math.pow(2,14)) * PASCAL_TO_INHG
 
-    Log.d(SensorTagData.TAG, s"BarPressure >${p_hg}< ...")
-    Log.v(SensorTagData.TAG, "Leave - extractBarometer()")
+    Log.d(SensorTag.TAG, s"BarPressure >${p_hg}< ...")
+    Log.v(SensorTag.TAG, "Leave - extractBarometer()")
     p_hg
   }
 
@@ -99,7 +115,7 @@ final object SensorTagData {
     val upperByte = c.getIntValue(BluetoothGattCharacteristic.FORMAT_SINT8, offset + 1) // Note: interpret MSB as signed.
 
     val s = (upperByte << 8) + lowerByte
-    Log.v(SensorTagData.TAG, s"shortSignedAtOffset >${s}< ...")
+    Log.v(SensorTag.TAG, s"shortSignedAtOffset >${s}< ...")
     s
   }
 
@@ -108,7 +124,11 @@ final object SensorTagData {
     val upperByte = c.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset + 1) // Note: interpret MSB as unsigned.
 
     val s = (upperByte << 8) + lowerByte
-    Log.v(SensorTagData.TAG, s"shortUnsignedAtOffset >${s}< ...")
+    Log.v(SensorTag.TAG, s"shortUnsignedAtOffset >${s}< ...")
     s
+  }
+
+  def dump(sr: Array[Byte]): String = {
+    s"(${sr.length}): " + sr.foldLeft(""){(r,c) => r + f":${c}%02X"}.drop(1)
   }
 }

@@ -1,4 +1,14 @@
-// @todo - add copyright header
+/*
+__________       .__                     .___
+\______   \ ____ |  | _____    ____    __| _/
+ |       _//  _ \|  | \__  \  /    \  / __ |
+ |    |   (  <_> )  |__/ __ \|   |  \/ /_/ |
+ |____|_  /\____/|____(____  /___|  /\____ |
+        \/                 \/     \/      \/
+Copyright (c), 2014, roland@tritsch.org
+http://www.tritsch.org
+*/
+
 package org.tritsch.scala.android.weather
 
 import android.app.{Activity, ProgressDialog}
@@ -19,42 +29,23 @@ import android.widget.{TextView, Toast}
 
 import java.util.UUID
 
-// @todo - fix the humidity problem
 // @todo - add documentation
 // @todo - split class into two. One activity. One callback
-// @todo - put all hard coded config data into seperate file (e.g. the DEVICE_NAME and all the UUIDs)
-// @todo - get rid of the vars. Make the code look like scala code. Rewrite/refactpr based on the Scala for Android book
-// @todo - refactor the code and start to build the beginnings of a common lib (e.g. a view to scan/list beacons)
-// @todo - pick a good license
 // @todo - add test cases
-// @todo - find a better solution to do the logging (e.g. enter/leave)
+
+private object MSG {
+  private var i = 100
+
+  val HUMIDITY = { i = i + 1; i }
+  val PRESSURE = { i = i + 1; i }
+  val PRESSURE_CAL = { i = i + 1; i }
+  val PROGRESS = { i = i + 1; i }
+  val DISMISS = { i = i + 1; i }
+  val CLEAR = { i = i + 1; i }
+}
+
 private object MainActivity {
-  val TAG = classOf[MainActivity].getName
-
-  // Use this to *only* find the TI sensor tags
-  val DEVICE_NAME = "SensorTag"
-
-  // Humidity Service
-  val HUMIDITY_SERVICE = UUID.fromString("f000aa20-0451-4000-b000-000000000000")
-  val HUMIDITY_DATA_CHAR = UUID.fromString("f000aa21-0451-4000-b000-000000000000")
-  val HUMIDITY_CONFIG_CHAR = UUID.fromString("f000aa22-0451-4000-b000-000000000000")
-
-  // Barometric Pressure Service
-  val PRESSURE_SERVICE = UUID.fromString("f000aa40-0451-4000-b000-000000000000")
-  val PRESSURE_DATA_CHAR = UUID.fromString("f000aa41-0451-4000-b000-000000000000")
-  val PRESSURE_CONFIG_CHAR = UUID.fromString("f000aa42-0451-4000-b000-000000000000")
-  val PRESSURE_CAL_CHAR = UUID.fromString("f000aa43-0451-4000-b000-000000000000")
-
-  // Client Configuration Descriptor
-  val CONFIG_DESCRIPTOR = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-  // Message ids for the handler
-  val MSG_HUMIDITY = 101
-  val MSG_PRESSURE = 102
-  val MSG_PRESSURE_CAL = 103
-  val MSG_PROGRESS = 201
-  val MSG_DISMISS = 202
-  val MSG_CLEAR = 301
+  val TAG = MainActivity.getClass.getName
 }
 
 class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
@@ -111,7 +102,6 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
 
     Log.i(MainActivity.TAG, "Cancel any scans in progress ...")
     mHandler.removeCallbacks(mStopRunnable)
-    // mHandler.removeCallbacks(mStartRunnable)
     mBluetoothAdapter.stopLeScan(this)
     Log.d(MainActivity.TAG, "Leave - onPause")
   }
@@ -136,7 +126,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
 
     Log.i(MainActivity.TAG, s"Add ${mDevices.size} devices to the overflow menu ...")
     for (i <- 0 until mDevices.size) {
-      menu.add(0, mDevices.keyAt(i), 0, mDevices.valueAt(i).getName)
+      menu.add(0, mDevices.keyAt(i), 0, f"${mDevices.valueAt(i).getAddress}%10s ...")
     }
     Log.d(MainActivity.TAG, "Leave - onCreateOptionsMenu")
     true
@@ -158,7 +148,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
         Log.i(MainActivity.TAG, s"Connecting to ${device.getName} ...")
         mConnectedGatt = device.connectGatt(this, false, mGattCallback)
 
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, s"Connecting to ${device.getName} ..."))
+        mHandler.sendMessage(Message.obtain(null, MSG.PROGRESS, s"Connecting to ${device.getName} ..."))
         super.onOptionsItemSelected(item)
       }
     }
@@ -179,15 +169,20 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       stopScan
     }
   }
-/*
-  private val mStartRunnable: Runnable = new Runnable {
-    override def run: Unit = {
-      startScan
-    }
-  }
-*/
+
   private def startScan: Unit = {
     Log.d(MainActivity.TAG, "Enter - startScan")
+/* @todo - go back to this implementation ...
+ * ... as soon as this https://code.google.com/p/android/issues/detail?id=59490 is fixed.
+ *
+    mBluetoothAdapter.startLeScan(
+      Array[UUID](
+        SensorTag.HUMIDITY_SERVICE,
+        SensorTag.PRESSURE_SERVICE
+      ),
+      this
+    )
+*/
     mBluetoothAdapter.startLeScan(this)
     setProgressBarIndeterminateVisibility(true)
     // @todo - put this conf var into a conf file
@@ -203,11 +198,13 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
   }
 
   // @todo - Move the implementation of BluetoothAdapter.LeScanCallback to a seperate file
-  override def onLeScan(device: BluetoothDevice, rssi: Int, scanRecord: Array[Byte]): Unit = {
+  override def onLeScan(device: BluetoothDevice, rssi: Int, sr: Array[Byte]): Unit = {
+    require(device.getName.equals("SensorTag"), "Only SensorTag devices should be found")
     Log.d(MainActivity.TAG, "Enter - onLeScan")
-    Log.i(MainActivity.TAG, s"Found new LE device ${device.getName} @ ${rssi} ...")
-    if(MainActivity.DEVICE_NAME.equals(device.getName)) {
-      Log.d(MainActivity.TAG, "Found new SensorTag ...")
+    Log.i(MainActivity.TAG, s"Found new LE device >${device.getName}/${device.getAddress}< @ >${rssi}< ...")
+    Log.v(MainActivity.TAG, s"With ScanRecord >${SensorTag.dump(sr)}< ...")
+    // @todo - remove the if as soon as this https://code.google.com/p/android/issues/detail?id=59490 is fixed
+    if(device.getName.equals("SensorTag")) {
       mDevices.put(device.hashCode, device)
       invalidateOptionsMenu
     }
@@ -237,22 +234,22 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       mState match {
         case 0 => {
           Log.i(MainActivity.TAG, "Enabling pressure calibration ...")
-          characteristic = gatt.getService(MainActivity.PRESSURE_SERVICE).getCharacteristic(MainActivity.PRESSURE_CONFIG_CHAR)
+          characteristic = gatt.getService(SensorTag.PRESSURE_SERVICE).getCharacteristic(SensorTag.PRESSURE_CONFIG_CHAR)
           characteristic.setValue(Array.fill[Byte](1)(0x02))
         }
         case 1 => {
           Log.i(MainActivity.TAG, "Enabling pressure ...")
-          characteristic = gatt.getService(MainActivity.PRESSURE_SERVICE).getCharacteristic(MainActivity.PRESSURE_CONFIG_CHAR)
+          characteristic = gatt.getService(SensorTag.PRESSURE_SERVICE).getCharacteristic(SensorTag.PRESSURE_CONFIG_CHAR)
           characteristic.setValue(Array.fill[Byte](1)(0x01))
         }
         case 2 => {
           Log.i(MainActivity.TAG, "Enabling humidity ...")
-          characteristic = gatt.getService(MainActivity.HUMIDITY_SERVICE).getCharacteristic(MainActivity.HUMIDITY_CONFIG_CHAR)
+          characteristic = gatt.getService(SensorTag.HUMIDITY_SERVICE).getCharacteristic(SensorTag.HUMIDITY_CONFIG_CHAR)
           characteristic.setValue(Array.fill[Byte](1)(0x01))
         }
         case _ => {
           Log.i(MainActivity.TAG, "All sensors enabled ...")
-          mHandler.sendEmptyMessage(MainActivity.MSG_DISMISS)
+          mHandler.sendEmptyMessage(MSG.DISMISS)
         }
       }
 
@@ -269,19 +266,19 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       mState match {
         case 0 => {
           Log.i(MainActivity.TAG, "Reading pressure calibration ....")
-          characteristic = gatt.getService(MainActivity.PRESSURE_SERVICE).getCharacteristic(MainActivity.PRESSURE_CAL_CHAR)
+          characteristic = gatt.getService(SensorTag.PRESSURE_SERVICE).getCharacteristic(SensorTag.PRESSURE_CAL_CHAR)
         }
         case 1 => {
           Log.i(MainActivity.TAG, "Reading pressure ...")
-          characteristic = gatt.getService(MainActivity.PRESSURE_SERVICE).getCharacteristic(MainActivity.PRESSURE_DATA_CHAR)
+          characteristic = gatt.getService(SensorTag.PRESSURE_SERVICE).getCharacteristic(SensorTag.PRESSURE_DATA_CHAR)
         }
         case 2 => {
           Log.i(MainActivity.TAG, "Reading humidity ...")
-          characteristic = gatt.getService(MainActivity.HUMIDITY_SERVICE).getCharacteristic(MainActivity.HUMIDITY_DATA_CHAR)
+          characteristic = gatt.getService(SensorTag.HUMIDITY_SERVICE).getCharacteristic(SensorTag.HUMIDITY_DATA_CHAR)
         }
         case _ => {
           Log.i(MainActivity.TAG, "All sensors read ...")
-          mHandler.sendEmptyMessage(MainActivity.MSG_DISMISS)
+          mHandler.sendEmptyMessage(MSG.DISMISS)
         }
       }
 
@@ -300,19 +297,19 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       mState match {
         case 0 => {
           Log.i(MainActivity.TAG, "Set notify pressure calibration ...")
-          characteristic = gatt.getService(MainActivity.PRESSURE_SERVICE).getCharacteristic(MainActivity.PRESSURE_CAL_CHAR)
+          characteristic = gatt.getService(SensorTag.PRESSURE_SERVICE).getCharacteristic(SensorTag.PRESSURE_CAL_CHAR)
         }
         case 1 => {
           Log.i(MainActivity.TAG, "Set notify pressure ...")
-          characteristic = gatt.getService(MainActivity.PRESSURE_SERVICE).getCharacteristic(MainActivity.PRESSURE_DATA_CHAR)
+          characteristic = gatt.getService(SensorTag.PRESSURE_SERVICE).getCharacteristic(SensorTag.PRESSURE_DATA_CHAR)
         }
         case 2 => {
           Log.i(MainActivity.TAG, "Set notify humidity ...")
-          characteristic = gatt.getService(MainActivity.HUMIDITY_SERVICE).getCharacteristic(MainActivity.HUMIDITY_DATA_CHAR)
+          characteristic = gatt.getService(SensorTag.HUMIDITY_SERVICE).getCharacteristic(SensorTag.HUMIDITY_DATA_CHAR)
         }
         case _ => {
           Log.i(MainActivity.TAG, "All sensor notifications set ...")
-          mHandler.sendEmptyMessage(MainActivity.MSG_DISMISS)
+          mHandler.sendEmptyMessage(MSG.DISMISS)
         }
       }
 
@@ -321,7 +318,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
         gatt.setCharacteristicNotification(characteristic, true)
 
         Log.i(MainActivity.TAG, "Enabled remote notifications ...")
-        val desc = characteristic.getDescriptor(MainActivity.CONFIG_DESCRIPTOR)
+        val desc = characteristic.getDescriptor(SensorTag.CONFIG_DESCRIPTOR)
         desc.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
         gatt.writeDescriptor(desc)
       }
@@ -336,15 +333,15 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       } else if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
         Log.i(MainActivity.TAG, "Discovering services ...")
         gatt.discoverServices
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, "Discovering Services ..."))
+        mHandler.sendMessage(Message.obtain(null, MSG.PROGRESS, "Discovering Services ..."))
       } else if(status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_DISCONNECTED) {
         Log.i(MainActivity.TAG, "Just disconnected ...")
-        mHandler.sendEmptyMessage(MainActivity.MSG_CLEAR)
+        mHandler.sendEmptyMessage(MSG.CLEAR)
       } else if(status != BluetoothGatt.GATT_SUCCESS) {
-        Log.w(MainActivity.TAG, "Error: Bad state detected ... disconnecting ...")
+        Log.e(MainActivity.TAG, "Error: Bad state detected ... disconnecting ...")
         gatt.disconnect
       } else {
-        Log.w(MainActivity.TAG, "Error: *Really* bad state detected ... disconnecting ...")
+        Log.wtf(MainActivity.TAG, "Error: *Really* bad state detected ... disconnecting ...")
         gatt.disconnect
       }
       Log.d(MainActivity.TAG, "Leave - OnConnectionStateChange")
@@ -353,7 +350,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
     override def onServicesDiscovered(gatt: BluetoothGatt, status: Int): Unit = {
       Log.d(MainActivity.TAG, "Enter - onServicesDiscovered")
       Log.i(MainActivity.TAG, s"Services discovered >${status}< ...")
-      mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PROGRESS, "Enabling Sensors ..."))
+      mHandler.sendMessage(Message.obtain(null, MSG.PROGRESS, "Enabling Sensors ..."))
       /*
        * With services discovered, we are going to reset our state machine and start
        * working through the sensors we need to enable
@@ -367,14 +364,15 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       Log.d(MainActivity.TAG, "Enter - onCharacteristicRead")
       Log.i(MainActivity.TAG, s"Reading characteristic >${characteristic.getUuid}< ...")
       // For each read, pass the data up to the UI thread to update the display ...
-      if(MainActivity.HUMIDITY_DATA_CHAR.equals(characteristic.getUuid)) {
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_HUMIDITY, characteristic))
-      } else if(MainActivity.PRESSURE_DATA_CHAR.equals(characteristic.getUuid)) {
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE, characteristic))
-      } else if(MainActivity.PRESSURE_CAL_CHAR.equals(characteristic.getUuid)) {
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE_CAL, characteristic))
-      } else {
-        Log.w(MainActivity.TAG, s"Error: Unknown characteristic detected >${characteristic.getUuid}< ...")
+      characteristic.getUuid match {
+        case SensorTag.HUMIDITY_DATA_CHAR =>
+          mHandler.sendMessage(Message.obtain(null, MSG.HUMIDITY, characteristic))
+        case SensorTag.PRESSURE_DATA_CHAR =>
+          mHandler.sendMessage(Message.obtain(null, MSG.PRESSURE, characteristic))
+        case SensorTag.PRESSURE_CAL_CHAR =>
+          mHandler.sendMessage(Message.obtain(null, MSG.PRESSURE_CAL, characteristic))
+        case _ =>
+          Log.e(MainActivity.TAG, s"Error: Unknown characteristic detected >${characteristic.getUuid}< ...")
       }
 
       // After reading the initial value, next we enable notifications ...
@@ -393,17 +391,18 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
       Log.d(MainActivity.TAG, "Enter - onCharacteristicChanged")
       /*
        * After notifications are enabled, all updates from the device on characteristic
-       * value changes will be posted here.  Similar to read, we hand these up to the
+       * value changes will be posted here. Similar to read, we hand these up to the
        * UI thread to update the display.
        */
-      if(MainActivity.HUMIDITY_DATA_CHAR.equals(characteristic.getUuid)) {
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_HUMIDITY, characteristic))
-      }
-      if(MainActivity.PRESSURE_DATA_CHAR.equals(characteristic.getUuid)) {
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE, characteristic))
-      }
-      if(MainActivity.PRESSURE_CAL_CHAR.equals(characteristic.getUuid)) {
-        mHandler.sendMessage(Message.obtain(null, MainActivity.MSG_PRESSURE_CAL, characteristic))
+      characteristic.getUuid match {
+        case SensorTag.HUMIDITY_DATA_CHAR =>
+          mHandler.sendMessage(Message.obtain(null, MSG.HUMIDITY, characteristic))
+        case SensorTag.PRESSURE_DATA_CHAR =>
+          mHandler.sendMessage(Message.obtain(null, MSG.PRESSURE, characteristic))
+        case SensorTag.PRESSURE_CAL_CHAR =>
+          mHandler.sendMessage(Message.obtain(null, MSG.PRESSURE_CAL, characteristic))
+        case _ =>
+          Log.e(MainActivity.TAG, s"Error: Unknown characteristic detected >${characteristic.getUuid}< ...")
       }
       Log.d(MainActivity.TAG, "Leave - onCharacteristicChanged")
     }
@@ -443,38 +442,38 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
     override def handleMessage(msg: Message): Unit = {
       Log.d(MainActivity.TAG, "Enter - handleMessage")
       msg.what match {
-        case MainActivity.MSG_HUMIDITY => {
+        case MSG.HUMIDITY => {
           val characteristic = msg.obj.asInstanceOf[BluetoothGattCharacteristic]
           if(characteristic.getValue == null) {
-            Log.w(MainActivity.TAG, "Error obtaining humidity value!!!")
+            Log.e(MainActivity.TAG, "Error obtaining humidity value!!!")
           } else {
             updateHumidityValues(characteristic)
           }
         }
-        case MainActivity.MSG_PRESSURE => {
+        case MSG.PRESSURE => {
           val characteristic = msg.obj.asInstanceOf[BluetoothGattCharacteristic]
           if(characteristic.getValue == null) {
-            Log.w(MainActivity.TAG, "Error obtaining pressure value!!!")
+            Log.e(MainActivity.TAG, "Error obtaining pressure value!!!")
           } else {
             updatePressureValue(characteristic)
           }
         }
-        case MainActivity.MSG_PRESSURE_CAL => {
+        case MSG.PRESSURE_CAL => {
           val characteristic = msg.obj.asInstanceOf[BluetoothGattCharacteristic]
           if(characteristic.getValue == null) {
-            Log.w(MainActivity.TAG, "Error obtaining cal value!!!")
+            Log.e(MainActivity.TAG, "Error obtaining cal value!!!")
           } else {
             updatePressureCals(characteristic)
           }
         }
-        case MainActivity.MSG_PROGRESS => {
+        case MSG.PROGRESS => {
           mProgress.setMessage(msg.obj.asInstanceOf[String])
           if(!mProgress.isShowing) {
             mProgress.show
           }
         }
-        case MainActivity.MSG_DISMISS => mProgress.hide
-        case MainActivity.MSG_CLEAR => clearDisplayValues
+        case MSG.DISMISS => mProgress.hide
+        case MSG.CLEAR => clearDisplayValues
       }
       Log.d(MainActivity.TAG, "Leave - handleMessage")
     }
@@ -483,7 +482,7 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
   // Methods to extract sensor data and update the UI
   private def updateHumidityValues(characteristic: BluetoothGattCharacteristic): Unit = {
     Log.d(MainActivity.TAG, "Enter - updateHumidityValues")
-    val humidity = SensorTagData.extractHumidity(characteristic)
+    val humidity = SensorTag.extractHumidity(characteristic)
     mHumidity.setText(f"${humidity}%.0f")
     Log.d(MainActivity.TAG, "Leave - updateHumidityValues")
   }
@@ -491,15 +490,15 @@ class MainActivity extends Activity with BluetoothAdapter.LeScanCallback {
   private var mPressureCals: Array[Int] = null
   private def updatePressureCals(characteristic: BluetoothGattCharacteristic): Unit = {
     Log.d(MainActivity.TAG, "Enter - updatePressureCals")
-    mPressureCals = SensorTagData.extractCalibrationCoefficients(characteristic)
+    mPressureCals = SensorTag.extractCalibrationCoefficients(characteristic)
     Log.d(MainActivity.TAG, "Leave - updatePressureCals")
   }
 
   private def updatePressureValue(characteristic: BluetoothGattCharacteristic): Unit = {
     Log.d(MainActivity.TAG, "Enter - updatePressureValue")
     if(mPressureCals != null) {
-      val pressure = SensorTagData.extractBarometer(characteristic, mPressureCals)
-      val temperature = SensorTagData.extractBarTemperature(characteristic, mPressureCals)
+      val pressure = SensorTag.extractBarometer(characteristic, mPressureCals)
+      val temperature = SensorTag.extractBarTemperature(characteristic, mPressureCals)
 
       mTemperature.setText(f"${temperature}%.1f")
       mPressure.setText(f"${pressure}%.2f")
